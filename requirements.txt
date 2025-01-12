@@ -1,11 +1,12 @@
 streamlit
+streamlit-code-editor
 langchain
 langchain-openai>=0.1.19,<0.2.0
 langchain-community
-PyPDF2
 inspeqai
-python-doten
+python-dotenv
 openai
 requests
-beautifulsoup4
-pysqlite3-binary
+autogen-agentchat~=0.2
+streamlit-ace
+langgraph
