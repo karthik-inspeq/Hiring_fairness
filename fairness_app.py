@@ -111,6 +111,7 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     if data is not None:
     # Read the uploaded CSV file into a DataFrame
         data_df = pd.read_csv(data)
+        st.write(data_df)
     # Ensure the folder exists
     if not os.path.exists(folder):
         os.makedirs(folder)
