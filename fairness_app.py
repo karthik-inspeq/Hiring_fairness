@@ -19,10 +19,11 @@ import requests
 from dotenv import load_dotenv
 import os
 import ast
-from temp.agentic_functions import *
 import tempfile
 from collections import defaultdict, deque
-
+from streamlit_flow import streamlit_flow
+from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
+from streamlit_flow.state import StreamlitFlowState
 
 
 
@@ -58,6 +59,7 @@ if "json_output" not in st.session_state: st.session_state['json_output'] = None
 if "disparate_impact" not in st.session_state: st.session_state['disparate_impact'] = None
 if "threshold" not in st.session_state: st.session_state['threshold'] = None
 if "executed" not in st.session_state: st.session_state['executed'] = None
+if "demographic_parity" not in st.session_state: st.session_state['demographic_parity'] = None
 
 st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 
@@ -93,19 +95,20 @@ st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 #             st.success("Python file executed successfully.")
 #         except Exception as e:
 #             st.error(f"Error executing the file: {e}")
-def run_python_file(file, save_dir="uploaded_scripts"):
+def run_python_file(file, file_name, save_dir="uploaded_scripts"):
     if file is not None:
+        st.write(file)
         # Ensure the save directory exists
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         
         # Save the uploaded file to the specified directory
-        save_path = os.path.join(save_dir, file.name)
+        save_path = os.path.join(save_dir, file_name)
         with open(save_path, "wb") as saved_file:
-            saved_file.write(file.read())
+            saved_file.write(file)
         
         # Display the uploaded file name and its saved path
-        st.write(f"Uploaded file: {file.name}")
+        st.write(f"Uploaded file: {file_name}")
         st.write(f"File saved at: {save_path}")
         
         # Import and execute the file
@@ -164,10 +167,12 @@ def disparate_impact_score(data, group_key="gender", outcome_key="score", thresh
 
         max_rate = max(selection_rates.values())  # Best-off group
         di_score = min_rate / max_rate if max_rate > 0 else 0
+        dp_score = abs(min_rate - max_rate)
     else:
-        di_score = 0  # No valid selection rates
+        di_score = 0
+        dp_score = 0# No valid selection rates
 
-    return di_score, selection_rates
+    return di_score, selection_rates, dp_score
 
 def extract_agent_names_from_code(code: str):
     """
@@ -272,16 +277,20 @@ def csv_uploader(uploaded_file):
 
 def main():
     st.markdown("""## Inspeq Fairness Demo for Hiring""")
-    llm = ChatOpenAI(
-        api_key=os.environ["OPENAI_API_KEY"],
-        model="gpt-4-turbo-preview",
-        temperature=0
-    )
     with st.sidebar:
         st.title("Menu:")
         if "agents" not in st.session_state:  # Ensure session state is initialized
             st.session_state["agents"] = []
         st.write("Make sure the agentic workflow, returns a json file in the following format:")
+        st.json(body=
+                    {
+            "id": int,
+            "resume_text": str,
+            "attribute1": str,
+            "attribute2": str,
+            "score": float
+        }
+        )
         st.session_state["agentic_functions"] = st.file_uploader("Upload a Python file containing agentic functions", type=["py"])
         
         with st.form("fairness_form"):
@@ -294,85 +303,64 @@ def main():
             st.session_state["run_workflow"]= st.form_submit_button("Calculate Fairness")
 
     # Enters code
-    if st.session_state["agentic_functions"]:
+    if st.session_state["agentic_functions"] is not None:
         # The above code is running a Python file that is stored in the `agentic_functions` key of the
         # Streamlit session state (`st.session_state`).
-        code_content = st.session_state["agentic_functions"].read().decode('utf-8')
-        run_python_file(st.session_state["agentic_functions"])
+        code_content = st.session_state["agentic_functions"].read()
+        st.write(code_content)
+        run_python_file(code_content, st.session_state['agentic_functions'].name)
         # Read the uploaded file
         try:
             # Ensure the file's content is read as a string
             # Extract agent names from the code
-            st.session_state['agents'] = extract_agent_names_from_code(code_content)
-            st.write(st.session_state['agents'])
+            st.session_state['agents'] = extract_agent_names_from_code(code_content.decode('utf-8'))
             st.success("Agents extracted successfully!")
         except Exception as e:
             st.error(f"Error processing file: {e}")
-        
-        # nodes = st_ace(
-        #     language="python",
-        #     theme="monokai",
-        #     show_gutter = True,
-        #     height=300,
-        # )
+
     if st.session_state['run_workflow']:
         data = json.load(st.session_state["json_output"])
         st.session_state['disparate_impact'] = disparate_impact_score(data, st.session_state['attribute'], outcome_key='score', protected_group=st.session_state['un_privileged'])
-        st.write(st.session_state['disparate_impact'])
-        st.write("The Disparate impact score is")
-        st.text(st.session_state["disparate_impact"][0])
-    # local_vars = {}
+        # st.write("The Disparate impact score is")
+        st.markdown(f"""
+            <div style="display: flex; justify-content: space-around; align-items: center;">
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+                    <div>Disparate Impact</div>
+                    <div>{st.session_state['disparate_impact'][0]}</div>
+                </div>
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
+                    <div>Demographic Parity</div>
+                    <div>{st.session_state['disparate_impact'][-1]}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    nodes = []
+    edges = []
+    for i, node in zip(range(len(st.session_state['agents'])),st.session_state["agents"]):
+        flow_node = StreamlitFlowNode(
+            id=f"{i}",  # Unique ID for each node
+            pos=(100 * i, 100),  # Position (x, y)
+            data={'content': node},  # Display content
+            node_type='default',  # Node type
+            source_position='right',  # Source connection
+            target_position='left',  # Target connection
+            draggable=True  # Allow dragging
+            )
+        nodes.append(flow_node)
+        if (i+1) < len(st.session_state['agents']):
+            edge_node = StreamlitFlowEdge(f'{i}-{i+1}', f'{i}', f'{i+1}',animated = True, marker_end={'type': 'arrow'})
+            edges.append(edge_node)
 
-    #     # Execute the string and evaluate the dictionary in the local_vars context
-    # exec(f"agents = {nodes}", {}, local_vars)
-    # agents_dict = local_vars['agents']
-    # st.session_state["nodes"] = agents_dict
-    # st.write("Enter code")
-    # st.session_state["code"] = st_ace(
-    #     language="python",
-    #     theme="monokai",
-    #     height=300,
-    # )
-    # if submit_button:
-    #     x = 0
-    #     if st.session_state["agentic_functions"] is not None:
-    #         file = st.session_state["agentic_functions"]
-    #         file_path = os.path.join("temp", file.name)
-    #         os.makedirs("temp", exist_ok=True)
-    #         with open(file_path, "wb") as f:
-    #             f.write(file.getbuffer())
-    #     # st.session_state["agents"].append({
-    #     #     "agent_name" : st.session_state["agent_name"],
-    #     #     "function" : st.session_state["function"],
-    #     #     "code" : st.session_state["code"]
-    #     # })
-    #     # st.write(st.session_state["agents"])
-    #     # if st.session_state["excel"]:
-    #     #     st.write(st.session_state["data"])
-    #     if st.session_state["fairness_score"]:
-    #         fairness_df, final_fairness = st.session_state["fairness_score"]
-    #         st.write(fairness_df)
-    #         st.write(f"Fairness Score is \n {final_fairness}")
-    # if st.session_state["run_workflow"]:
-    #     job_requirements = {
-    #         "python": 0.9,
-    #         "machine learning": 0.8,
-    #         "sql": 0.7,
-    #         "aws": 0.6,
-    #         "docker": 0.5,
-    #         "api development": 0.8,
-    #         "data analysis": 0.7
-    #     }
-    #     initial_state = WorkflowState(
-    #         job_id="string",
-    #         job_requirements=job_requirements,
-    #         api_key="string",
-    #         current_candidate_index=0,
-    #         is_complete=False
-    #     )
-    #     workflow = create_agent_flow(llm, st.session_state["data"], st.session_state["nodes"])
-    #     final_state = workflow.invoke(initial_state)
-    #     st.write(final_state)
+    state = StreamlitFlowState(nodes, edges)
+    if st.session_state['agents']:
+        streamlit_flow('static_flow',
+                        state,
+                        fit_view=True,
+                        show_minimap=False,
+                        show_controls=False,
+                        pan_on_drag=False,
+                        allow_zoom=False)
+
         
         
 if __name__ == "__main__":

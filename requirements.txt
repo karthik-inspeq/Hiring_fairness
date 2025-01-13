@@ -10,3 +10,4 @@ requests
 autogen-agentchat~=0.2
 streamlit-ace
 langgraph
+streamlit-flow-component
