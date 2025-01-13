@@ -120,7 +120,6 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     if isinstance(data_df, dict):
         df = pd.DataFrame(data)
     elif isinstance(data_df, pd.DataFrame):
-        st.write("Entered")
         df = data_df
     else:
         raise ValueError("The data should be a pandas DataFrame or a dictionary.")
@@ -327,10 +326,10 @@ def main():
             "score": float
         }
         )
-        with st.form("agents_form"):
-            st.session_state["agentic_functions"] = st.file_uploader("Upload a Python file containing agentic functions", type=["py"])
-            st.session_state["resume_data"] = st.file_uploader("Upload a Python file containing agentic functions", type=["csv"])
-            st.session_state["agents_submit"] = st.form_submit_button("Run Agentic workflow")
+        # with st.form("agents_form"):
+        st.session_state["agentic_functions"] = st.file_uploader("Upload a Python file containing agentic functions", type=["py"])
+        st.session_state["resume_data"] = st.file_uploader("Upload a Python file containing agentic functions", type=["csv"])
+        st.session_state["agents_submit"] = st.button("Run Agentic workflow")
         
         with st.form("fairness_form"):
             st.session_state["json_output"] = st.file_uploader("Upload the JSON file containing the results", type=["json"])
