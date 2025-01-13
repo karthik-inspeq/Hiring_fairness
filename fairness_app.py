@@ -112,7 +112,6 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     if data is not None:
     # Read the uploaded CSV file into a DataFrame
         data_df = pd.read_csv(data)
-        st.write(data_df)
     # Ensure the folder exists
     if not os.path.exists(folder):
         os.makedirs(folder)
@@ -121,6 +120,7 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     if isinstance(data_df, dict):
         df = pd.DataFrame(data)
     elif isinstance(data_df, pd.DataFrame):
+        st.write("Entered")
         df = data_df
     else:
         raise ValueError("The data should be a pandas DataFrame or a dictionary.")
@@ -130,7 +130,6 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     
     # Save the DataFrame as a CSV file
     df.to_csv(file_path, index=False)
-    time.sleep(20)
     
     return file_path
 def run_python_file(file, file_name, save_dir="uploaded_scripts"):
