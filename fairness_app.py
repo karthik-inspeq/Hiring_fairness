@@ -97,7 +97,6 @@ st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 #             st.error(f"Error executing the file: {e}")
 def run_python_file(file, file_name, save_dir="uploaded_scripts"):
     if file is not None:
-        st.write(file)
         # Ensure the save directory exists
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
