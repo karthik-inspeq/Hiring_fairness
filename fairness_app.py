@@ -307,7 +307,6 @@ def main():
         # The above code is running a Python file that is stored in the `agentic_functions` key of the
         # Streamlit session state (`st.session_state`).
         code_content = st.session_state["agentic_functions"].read()
-        st.write(code_content)
         run_python_file(code_content, st.session_state['agentic_functions'].name)
         # Read the uploaded file
         try:
