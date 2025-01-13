@@ -60,6 +60,7 @@ if "disparate_impact" not in st.session_state: st.session_state['disparate_impac
 if "threshold" not in st.session_state: st.session_state['threshold'] = None
 if "executed" not in st.session_state: st.session_state['executed'] = None
 if "demographic_parity" not in st.session_state: st.session_state['demographic_parity'] = None
+if "agents_submit" not in st.session_state: st.session_state['agents_submit'] = None
 
 st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 
@@ -95,6 +96,38 @@ st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 #             st.success("Python file executed successfully.")
 #         except Exception as e:
 #             st.error(f"Error executing the file: {e}")
+def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_scripts"):
+    """
+    This function accepts data, processes it, and saves it as a CSV file in the specified folder.
+    
+    Parameters:
+    - data (DataFrame or dict): The data to be saved as CSV. Can be a pandas DataFrame or a dictionary that can be converted to a DataFrame.
+    - filename (str): The name of the file to save the data as (default is "processed_data.csv").
+    - folder (str): The folder where the CSV will be saved (default is "uploaded_scripts").
+    
+    Returns:
+    - str: The path of the saved CSV file.
+    """
+    
+    # Ensure the folder exists
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    
+    # If the data is in a dictionary format, convert it to a DataFrame
+    if isinstance(data, dict):
+        df = pd.DataFrame(data)
+    elif isinstance(data, pd.DataFrame):
+        df = data
+    else:
+        raise ValueError("The data should be a pandas DataFrame or a dictionary.")
+    
+    # Define the full path to the file
+    file_path = os.path.join(folder, filename)
+    
+    # Save the DataFrame as a CSV file
+    df.to_csv(file_path, index=False)
+    
+    return file_path
 def run_python_file(file, file_name, save_dir="uploaded_scripts"):
     if file is not None:
         # Ensure the save directory exists
@@ -290,7 +323,10 @@ def main():
             "score": float
         }
         )
-        st.session_state["agentic_functions"] = st.file_uploader("Upload a Python file containing agentic functions", type=["py"])
+        with st.form("agents_form"):
+            st.session_state["agentic_functions"] = st.file_uploader("Upload a Python file containing agentic functions", type=["py"])
+            st.session_state["resume_data"] = st.file_uploader("Upload a Python file containing agentic functions", type=["csv"])
+            st.session_state["agents_submit"] = st.form_submit_button("Run Agentic workflow")
         
         with st.form("fairness_form"):
             st.session_state["json_output"] = st.file_uploader("Upload the JSON file containing the results", type=["json"])
@@ -302,9 +338,10 @@ def main():
             st.session_state["run_workflow"]= st.form_submit_button("Calculate Fairness")
 
     # Enters code
-    if st.session_state["agentic_functions"] is not None:
+    if st.session_state["agents_submit"] and st.session_state["agentic_functions"] and st.session_state["resume_data"]:
         # The above code is running a Python file that is stored in the `agentic_functions` key of the
         # Streamlit session state (`st.session_state`).
+        create_csv_from_data(st.session_state["resume_data"])
         code_content = st.session_state["agentic_functions"].read()
         run_python_file(code_content, st.session_state['agentic_functions'].name)
         # Read the uploaded file

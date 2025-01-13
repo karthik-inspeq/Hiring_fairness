@@ -18,6 +18,10 @@ import re
 import os
 import pandas as pd  
 import math
+from dotenv import load_dotenv
+
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
 
 
 # Configure logging
@@ -53,7 +57,7 @@ def fetch_candidates(state: WorkflowState, df) -> WorkflowState:
         # dover_api = DoverAPI(state.api_key)
         # candidates = dover_api.get_candidates(state.job_id)
         # candidates = df[df["Category"] == state.job_id]["ID"].to_list()
-        new_df = df[df["Category"] == state.job_id][:1]
+        new_df = df[df["Category"] == state.job_id][:10]
         candidates = []
         for _, row in new_df.iterrows():
           candidate = {
@@ -216,7 +220,7 @@ Given the significant gap between the candidate's skills and experience and the 
 """
 # Initialize LLM
 llm = ChatOpenAI(
-    api_key="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",
+    api_key=os.environ["OPENAI_API_KEY"],
     model="gpt-4-turbo-preview",
     temperature=0
 )
@@ -291,7 +295,7 @@ def create_screening_workflow(llm: ChatOpenAI, df) -> Graph:
 def main():
     """Run the automated resume screening workflow"""
     # Configuration
-    OPENAI_API_KEY = "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"
+    OPENAI_API_KEY = "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"
     DOVER_API_KEY = "29ba9799-3cf8-4cbd-9d4b-7fe9232131cc"
     JOB_ID = "HR"
 
