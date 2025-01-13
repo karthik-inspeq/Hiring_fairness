@@ -24,6 +24,7 @@ from collections import defaultdict, deque
 from streamlit_flow import streamlit_flow
 from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
 from streamlit_flow.state import StreamlitFlowState
+import time
 
 
 
@@ -129,6 +130,7 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     
     # Save the DataFrame as a CSV file
     df.to_csv(file_path, index=False)
+    time.sleep(20)
     
     return file_path
 def run_python_file(file, file_name, save_dir="uploaded_scripts"):
