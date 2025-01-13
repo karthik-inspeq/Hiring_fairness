@@ -108,16 +108,18 @@ def create_csv_from_data(data, filename="processed_data.csv", folder="uploaded_s
     Returns:
     - str: The path of the saved CSV file.
     """
-    
+    if data is not None:
+    # Read the uploaded CSV file into a DataFrame
+        data_df = pd.read_csv(data)
     # Ensure the folder exists
     if not os.path.exists(folder):
         os.makedirs(folder)
     
     # If the data is in a dictionary format, convert it to a DataFrame
-    if isinstance(data, dict):
+    if isinstance(data_df, dict):
         df = pd.DataFrame(data)
-    elif isinstance(data, pd.DataFrame):
-        df = data
+    elif isinstance(data_df, pd.DataFrame):
+        df = data_df
     else:
         raise ValueError("The data should be a pandas DataFrame or a dictionary.")
     
