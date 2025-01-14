@@ -183,14 +183,13 @@ def disparate_impact_score(data, group_key="gender", outcome_key="score", thresh
         group_counts[group]["total"] += 1
         if outcome >= threshold:  # Consider scores above threshold as positive outcomes
             group_counts[group]["positive"] += 1
-    st.write(group)
-    st.write(group_counts[group]["positive"])
+
     # Calculate selection rates for each group
     selection_rates = {
         group: counts["positive"] / counts["total"] if counts["total"] > 0 else 0
         for group, counts in group_counts.items()
     }
-
+    best_group = max(selection_rates, key=selection_rates.get) if selection_rates else None
     # Compute Disparate Impact
     if selection_rates:
         if protected_group:
@@ -208,7 +207,7 @@ def disparate_impact_score(data, group_key="gender", outcome_key="score", thresh
         di_score = 0
         dp_score = 0# No valid selection rates
 
-    return di_score, selection_rates, dp_score
+    return di_score, selection_rates, dp_score, best_group
 
 def extract_agent_names_from_code(code: str):
     """
@@ -359,20 +358,28 @@ def main():
 
     if st.session_state['run_workflow']:
         data = json.load(st.session_state["json_output"])
-        st.session_state['disparate_impact'] = disparate_impact_score(data, st.session_state['attribute'], outcome_key='score', protected_group=st.session_state['un_privileged'])
+        st.session_state['disparate_impact'] = disparate_impact_score(data, st.session_state['attribute'], outcome_key='score', threshold=float(st.session_state["threshold"]), protected_group=st.session_state['un_privileged'])
         # st.write("The Disparate impact score is")
-        st.markdown(f"""
-            <div style="display: flex; justify-content: space-around; align-items: center;">
-                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
-                    <div>Disparate Impact</div>
-                    <div>{st.session_state['disparate_impact']}</div>
+        if st.session_state['disparate_impact'][-1] != st.session_state['un_privileged']:
+            st.markdown(f"""
+                <div style="display: flex; justify-content: space-around; align-items: center;">
+                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+                        <div>Disparate Impact</div>
+                        <div>{st.session_state['disparate_impact'][0]}</div>
+                    </div>
+                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
+                        <div>Demographic Parity</div>
+                        <div>{st.session_state['disparate_impact'][-2]}</div>
+                    </div>
                 </div>
-                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
-                    <div>Demographic Parity</div>
-                    <div>{st.session_state['disparate_impact'][-1]}</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+                <div style="display: flex; justify-content: space-around; align-items: center;">
+                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+                        <div>"{st.session_state['un_privileged']}" is a previleged group</div>""", unsafe_allow_html=True)
+        df = pd.DataFrame(list(st.session_state['disparate_impact'][1].items()), columns=["Gender", "Selection Rates"])
+        st.write(df)
     nodes = []
     edges = []
     for i, node in zip(range(len(st.session_state['agents'])),st.session_state["agents"]):
