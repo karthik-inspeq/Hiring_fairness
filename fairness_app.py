@@ -209,6 +209,70 @@ def disparate_impact_score(data, group_key="gender", outcome_key="score", thresh
 
     return di_score, selection_rates, dp_score, best_group
 
+from collections import defaultdict
+
+def disparate_impact_and_demographic_parity(data, group_key="gender", outcome_key="score", threshold=0.5, protected_group=None, parity_threshold=0.1):
+    """
+    Compute Disparate Impact (DI) and Demographic Parity (DP) scores for groups.
+    
+    Parameters:
+        data (list): List of dictionaries containing candidate data.
+        group_key (str): Key representing the group attribute (default is 'gender').
+        outcome_key (str): Key representing the score or outcome (default is 'score').
+        threshold (float): Threshold to consider a positive outcome (default is 0.5).
+        protected_group (str): Specify a protected group to compute DI and DP relative to this group (optional).
+        parity_threshold (float): Tolerance level for Demographic Parity (default is 0.1).
+        
+    Returns:
+        dict: DI scores for all groups.
+        dict: DP scores (absolute differences) for all groups.
+        dict: Whether each group meets Demographic Parity.
+        float: Overall selection rate (used for DI and DP calculations).
+    """
+    # Create a dictionary to count positive outcomes and total members for each group
+    group_counts = defaultdict(lambda: {"positive": 0, "total": 0})
+
+    # Populate the group counts
+    for entry in data:
+        group = entry[group_key]
+        outcome = entry[outcome_key]
+        group_counts[group]["total"] += 1
+        if outcome >= threshold:  # Positive outcomes above threshold
+            group_counts[group]["positive"] += 1
+
+    # Calculate selection rates for each group
+    selection_rates = {
+        group: counts["positive"] / counts["total"] if counts["total"] > 0 else 0
+        for group, counts in group_counts.items()
+    }
+
+    # Calculate the overall selection rate (weighted average)
+    total_members = sum(counts["total"] for counts in group_counts.values())
+    overall_selection_rate = sum(
+        (counts["total"] / total_members) * (counts["positive"] / counts["total"] if counts["total"] > 0 else 0)
+        for counts in group_counts.values()
+    ) if total_members > 0 else 0
+
+    # Compute DI and DP scores
+    di_scores = {}
+    dp_scores = {}
+    dp_parity_check = {}
+    
+    for group, rate in selection_rates.items():
+        di_scores[group] = rate / overall_selection_rate if overall_selection_rate > 0 else 0
+        dp_scores[group] = abs(rate - overall_selection_rate) if overall_selection_rate > 0 else 0
+        dp_parity_check[group] = dp_scores[group] <= parity_threshold  # Check if within tolerance
+
+    # Handle specific protected group
+    if protected_group:
+        if protected_group not in di_scores:
+            raise ValueError(f"Protected group '{protected_group}' not found in data.")
+        di_scores = {protected_group: di_scores[protected_group]}
+        dp_scores = {protected_group: dp_scores[protected_group]}
+        dp_parity_check = {protected_group: dp_parity_check[protected_group]}
+
+    return di_scores, dp_scores, dp_parity_check, overall_selection_rate, selection_rates
+
 def extract_agent_names_from_code(code: str):
     """
     Extract agent names from LangGraph workflow code in execution order.
@@ -358,27 +422,40 @@ def main():
 
     if st.session_state['run_workflow']:
         data = json.load(st.session_state["json_output"])
-        st.session_state['disparate_impact'] = disparate_impact_score(data, st.session_state['attribute'], outcome_key='score', threshold=float(st.session_state["threshold"]), protected_group=st.session_state['un_privileged'])
+        st.session_state['disparate_impact'] = disparate_impact_and_demographic_parity(data, st.session_state['attribute'], outcome_key='score', threshold=float(st.session_state["threshold"]), protected_group=st.session_state['un_privileged'])
         # st.write("The Disparate impact score is")
-        if st.session_state['disparate_impact'][-1] != st.session_state['un_privileged']:
-            st.markdown(f"""
-                <div style="display: flex; justify-content: space-around; align-items: center;">
-                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
-                        <div>Disparate Impact</div>
-                        <div>{st.session_state['disparate_impact'][0]}</div>
-                    </div>
-                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
-                        <div>Demographic Parity</div>
-                        <div>{st.session_state['disparate_impact'][-2]}</div>
-                    </div>
+        # if st.session_state['disparate_impact'][-1] != st.session_state['un_privileged']:
+        #     st.markdown(f"""
+        #         <div style="display: flex; justify-content: space-around; align-items: center;">
+        #             <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+        #                 <div>Disparate Impact</div>
+        #                 <div>{st.session_state['disparate_impact'][0]}</div>
+        #             </div>
+        #             <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
+        #                 <div>Demographic Parity</div>
+        #                 <div>{st.session_state['disparate_impact'][-2]}</div>
+        #             </div>
+        #         </div>
+        #     """, unsafe_allow_html=True)
+        # else:
+        #     st.markdown(f"""
+        #         <div style="display: flex; justify-content: space-around; align-items: center;">
+        #             <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+        #                 <div>"{st.session_state['un_privileged']}" group has higher selection rate at {st.session_state["disparate_impact"][1][st.session_state["un_privileged"]]}</div>""", unsafe_allow_html=True)
+        
+        st.markdown(f"""
+            <div style="display: flex; justify-content: space-around; align-items: center;">
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+                    <div>Disparate Impact</div>
+                    <div>{st.session_state['disparate_impact'][0][st.session_state["un_privileged"]]}</div>
                 </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div style="display: flex; justify-content: space-around; align-items: center;">
-                    <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
-                        <div>"{st.session_state['un_privileged']}" is a previleged group</div>""", unsafe_allow_html=True)
-        df = pd.DataFrame(list(st.session_state['disparate_impact'][1].items()), columns=["Gender", "Selection Rates"])
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
+                    <div>Demographic Parity</div>
+                    <div>{round(st.session_state['disparate_impact'][1][st.session_state['un_privileged']], 2)}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        df = pd.DataFrame(list(st.session_state['disparate_impact'][-1].items()), columns=[f"{st.session_state['attribute']}", "Selection Rates"])
         st.write(df)
     nodes = []
     edges = []
