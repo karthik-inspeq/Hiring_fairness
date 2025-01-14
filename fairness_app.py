@@ -183,7 +183,7 @@ def disparate_impact_score(data, group_key="gender", outcome_key="score", thresh
         group_counts[group]["total"] += 1
         if outcome >= threshold:  # Consider scores above threshold as positive outcomes
             group_counts[group]["positive"] += 1
-
+    st.write(group_counts[group]["positive"])
     # Calculate selection rates for each group
     selection_rates = {
         group: counts["positive"] / counts["total"] if counts["total"] > 0 else 0
