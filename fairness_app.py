@@ -390,14 +390,14 @@ def main():
             edges.append(edge_node)
 
     state = StreamlitFlowState(nodes, edges)
-    # if st.session_state['agents']:
-    #     streamlit_flow('static_flow',
-    #                     state,
-    #                     fit_view=True,
-    #                     show_minimap=False,
-    #                     show_controls=False,
-    #                     pan_on_drag=False,
-    #                     allow_zoom=False)
+    if st.session_state['agents']:
+        streamlit_flow('static_flow',
+                        state,
+                        fit_view=True,
+                        show_minimap=False,
+                        show_controls=False,
+                        pan_on_drag=False,
+                        allow_zoom=False)
 
         
         
