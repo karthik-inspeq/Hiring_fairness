@@ -364,7 +364,7 @@ def main():
             <div style="display: flex; justify-content: space-around; align-items: center;">
                 <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
                     <div>Disparate Impact</div>
-                    <div>{st.session_state['disparate_impact'][0]}</div>
+                    <div>{st.session_state['disparate_impact']}</div>
                 </div>
                 <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
                     <div>Demographic Parity</div>
