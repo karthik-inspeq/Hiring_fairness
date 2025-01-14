@@ -346,7 +346,7 @@ def main():
         # Streamlit session state (`st.session_state`).
         create_csv_from_data(st.session_state["resume_data"])
         code_content = st.session_state["agentic_functions"].read()
-        run_python_file(code_content, st.session_state['agentic_functions'].name)
+        # run_python_file(code_content, st.session_state['agentic_functions'].name)
         # Read the uploaded file
         try:
             # Ensure the file's content is read as a string
