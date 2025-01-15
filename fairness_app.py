@@ -62,6 +62,7 @@ if "threshold" not in st.session_state: st.session_state['threshold'] = None
 if "executed" not in st.session_state: st.session_state['executed'] = None
 if "demographic_parity" not in st.session_state: st.session_state['demographic_parity'] = None
 if "agents_submit" not in st.session_state: st.session_state['agents_submit'] = None
+if "score_threshold" not in st.session_state: st.session_state['score_threshold'] = None
 
 st.set_page_config(page_title="Agentic workflow demo", layout="wide")
 
@@ -273,6 +274,124 @@ def disparate_impact_and_demographic_parity(data, group_key="gender", outcome_ke
 
     return di_scores, dp_scores, dp_parity_check, overall_selection_rate, selection_rates
 
+
+def compute_fairness_metrics(data, group_key="gender", outcome_key="score", ground_truth_key="ground_truth", threshold=0.5, score_threshold=0.5, protected_group=None, parity_threshold=0.1):
+    """
+    Compute Disparate Impact (DI), Demographic Parity (DP), Predictive Equality Difference (PED), 
+    and Equalized Odds Difference (EOD) scores for groups.
+    
+    Parameters:
+        data (list): List of dictionaries containing candidate data.
+        group_key (str): Key representing the group attribute (default is 'gender').
+        outcome_key (str): Key representing the score or outcome (default is 'score').
+        ground_truth_key (str): Key representing the ground truth labels.
+        threshold (float): Threshold to consider a positive outcome (default is 0.5).
+        score_threshold (float): Score threshold for categorizing outcomes (default is 0.5).
+        protected_group (str): Specify a protected group to compute metrics relative to this group (optional).
+        parity_threshold (float): Tolerance level for Demographic Parity (default is 0.1).
+        
+    Returns:
+        dict: DI scores for all groups.
+        dict: DP scores (absolute differences) for all groups.
+        dict: PED scores for all groups.
+        dict: EOD scores for all groups.
+        dict: Whether each group meets Demographic Parity.
+        float: Overall selection rate (used for DI and DP calculations).
+        dict: True Positive Rates (TPR) and False Positive Rates (FPR) for each group.
+    """
+    # Create dictionaries to track counts
+    group_counts = defaultdict(lambda: {"positive": 0, "total": 0, "true_positive": 0, "false_positive": 0, "false_negative": 0, "true_negative": 0})
+    
+    # Populate the group counts
+    for entry in data:
+        group = entry[group_key]
+        outcome = 1 if entry[outcome_key] >= score_threshold else 0
+        ground_truth = 1 if entry[ground_truth_key] >= score_threshold else 0
+        
+        group_counts[group]["total"] += 1
+        if outcome == 1:
+            group_counts[group]["positive"] += 1
+            if ground_truth == 1:
+                group_counts[group]["true_positive"] += 1
+            else:
+                group_counts[group]["false_positive"] += 1
+        else:
+            if ground_truth == 1:
+                group_counts[group]["false_negative"] += 1
+            else:
+                group_counts[group]["true_negative"] += 1
+
+    # Calculate selection rates, TPR, and FPR for each group
+    selection_rates = {}
+    true_positive_rates = {}
+    false_positive_rates = {}
+    group_sizes = {}
+    
+    for group, counts in group_counts.items():
+        total = counts["total"]
+        positive_outcomes = counts["positive"]
+        true_positives = counts["true_positive"]
+        false_positives = counts["false_positive"]
+        true_negatives = counts["true_negative"]
+        false_negatives = counts["false_negative"]
+
+        group_sizes[group] = total
+        selection_rates[group] = positive_outcomes / total if total > 0 else 0
+        true_positive_rates[group] = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+        false_positive_rates[group] = false_positives / (false_positives + true_negatives) if (false_positives + true_negatives) > 0 else 0
+    
+    # Calculate the overall selection rate (weighted average)
+    total_members = sum(group_sizes.values())
+    overall_selection_rate = sum(
+        (group_sizes[group] / total_members) * selection_rates[group]
+        for group in group_sizes
+    ) if total_members > 0 else 0
+
+    # Compute metrics
+    di_scores = {}
+    dp_scores = {}
+    ped_scores = {}
+    eod_scores = {}
+    dp_parity_check = {}
+
+    for group in group_counts.keys():
+        rate = selection_rates[group]
+        
+        # Disparate Impact
+        di_scores[group] = rate / overall_selection_rate if overall_selection_rate > 0 else 0
+        # Demographic Parity
+        dp_scores[group] = abs(rate - overall_selection_rate) if overall_selection_rate > 0 else 0
+        dp_parity_check[group] = dp_scores[group] <= parity_threshold
+
+        # Weighted averages for PED and EOD
+        if protected_group and protected_group in group_sizes:
+            other_groups = [g for g in group_sizes if g != protected_group]
+            other_weights = {g: group_sizes[g] / (total_members - group_sizes[protected_group]) for g in other_groups}
+            
+            weighted_avg_tpr = sum(true_positive_rates[g] * other_weights[g] for g in other_groups if g in true_positive_rates)
+            weighted_avg_fpr = sum(false_positive_rates[g] * other_weights[g] for g in other_groups if g in false_positive_rates)
+            
+            ped_scores[group] = abs(true_positive_rates[group] - weighted_avg_tpr)
+            eod_scores[group] = 0.5 * (
+                abs(true_positive_rates[group] - weighted_avg_tpr) +
+                abs(false_positive_rates[group] - weighted_avg_fpr)
+            )
+        else:
+            ped_scores[group] = 0
+            eod_scores[group] = 0
+
+    # Handle specific protected group
+    if protected_group:
+        if protected_group not in di_scores:
+            raise ValueError(f"Protected group '{protected_group}' not found in data.")
+        di_scores = {protected_group: di_scores[protected_group]}
+        dp_scores = {protected_group: dp_scores[protected_group]}
+        ped_scores = {protected_group: ped_scores[protected_group]}
+        eod_scores = {protected_group: eod_scores[protected_group]}
+        dp_parity_check = {protected_group: dp_parity_check[protected_group]}
+
+    return di_scores, dp_scores, ped_scores, eod_scores, dp_parity_check, overall_selection_rate, selection_rates, (true_positive_rates, false_positive_rates)
+
 def extract_agent_names_from_code(code: str):
     """
     Extract agent names from LangGraph workflow code in execution order.
@@ -399,8 +518,8 @@ def main():
             st.session_state["json_output"] = st.file_uploader("Upload the JSON file containing the results", type=["json"])
             st.session_state["attribute"] = st.text_input(label="Enter Attribute", placeholder="e.g., gender, age, etc.")
             st.session_state["un_privileged"] = st.text_input(label="Enter group to calculate fairness", placeholder="e.g., female, minority group, etc.")
-            st.session_state["threshold"] = st.text_input(label="Enter the threshold for these scores", placeholder="e.g., 0.5")
-            
+            st.session_state["threshold"] = st.text_input(label="Enter the threshold above which a candidate is considered", placeholder="e.g., 0.5")
+            st.session_state["score_threshold"] = st.text_input(label="Enter the threshold above which a candidate is selected", placeholder="e.g., 0.5")
             # Submit button for the form
             st.session_state["run_workflow"]= st.form_submit_button("Calculate Fairness")
 
@@ -422,7 +541,8 @@ def main():
 
     if st.session_state['run_workflow']:
         data = json.load(st.session_state["json_output"])
-        st.session_state['disparate_impact'] = disparate_impact_and_demographic_parity(data, st.session_state['attribute'], outcome_key='score', threshold=float(st.session_state["threshold"]), protected_group=st.session_state['un_privileged'])
+        # st.session_state['disparate_impact'] = disparate_impact_and_demographic_parity(data, st.session_state['attribute'], outcome_key='score', threshold=float(st.session_state["threshold"]), protected_group=st.session_state['un_privileged'])
+        st.session_state['disparate_impact'] = compute_fairness_metrics(data, group_key="gender", outcome_key="score", ground_truth_key="ground_truth", threshold= float(st.session_state["threshold"]), score_threshold = float(st.session_state["score_threshold"]), protected_group=st.session_state['un_privileged'], parity_threshold=0.1)
         # st.write("The Disparate impact score is")
         # if st.session_state['disparate_impact'][-1] != st.session_state['un_privileged']:
         #     st.markdown(f"""
@@ -454,8 +574,18 @@ def main():
                     <div>{round(st.session_state['disparate_impact'][1][st.session_state['un_privileged']], 2)}</div>
                 </div>
             </div>
+            <div style="display: flex; justify-content: space-around; align-items: center;">
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #4CAF50;">
+                    <div>PED</div>
+                    <div>{round(st.session_state['disparate_impact'][2][st.session_state["un_privileged"]], 3)}</div>
+                </div>
+                <div style="text-align: center; font-size: 36px; font-weight: bold; color: #2196F3;">
+                    <div>EOD</div>
+                    <div>{round(st.session_state['disparate_impact'][3][st.session_state['un_privileged']], 2)}</div>
+                </div>
+            </div>
         """, unsafe_allow_html=True)
-        df = pd.DataFrame(list(st.session_state['disparate_impact'][-1].items()), columns=[f"{st.session_state['attribute']}", "Selection Rates"])
+        df = pd.DataFrame(list(st.session_state['disparate_impact'][-2].items()), columns=[f"{st.session_state['attribute']}", "Selection Rates"])
         st.write(df)
     nodes = []
     edges = []
